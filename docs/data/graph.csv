@@ -1,0 +1,11 @@
+source,relationship,group_source,target,group_target
+Max,organizes trip for,Organizer,Lukas,Groom
+Max,rooms with,Organizer,Felix,Guest
+Lukas,brother of,Groom,Tobias,Guest
+Lukas,rooms with,Groom,Jonas,Guest
+Tobias,drives,Guest,Daniel,Guest
+Daniel,owes,Guest,Max,Organizer
+Felix,owes,Guest,Max,Organizer
+Jonas,plans surprise with,Guest,Max,Organizer
+Tobias,plans surprise with,Guest,Felix,Guest
+Jonas,owes,Guest,Tobias,Guest
