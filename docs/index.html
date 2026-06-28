@@ -35,6 +35,8 @@
     --g-engineering:#6E86B5;
     --g-design:#C98AA6;
     --g-default:#7E8AA3;
+    --g-debtor:#D2725E;
+    --g-creditor:#56C18B;
   }
   *{box-sizing:border-box;}
   html,body{height:100%;margin:0;}
@@ -197,7 +199,7 @@ const CONFIG = {
   //   repo file:   "data/graph.csv"
   //   Google Sheet: "https://docs.google.com/spreadsheets/d/e/XXXX/pub?gid=0&single=true&output=csv"
   sheetCsvUrl: "data/graph.csv",
-  title: "Knowledge Graph"
+  title: "JGA Schuldenausgleich"
 };
 
 const SAMPLE_CSV =
@@ -216,7 +218,8 @@ Lena Fischer,advises,Leadership,Daniel Reyes,Product`;
 function getCss(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
 const GROUP_COLORS={
   Leadership:getCss('--g-leadership'),Product:getCss('--g-product'),
-  Engineering:getCss('--g-engineering'),Design:getCss('--g-design')
+  Engineering:getCss('--g-engineering'),Design:getCss('--g-design'),
+  Schuldner:getCss('--g-debtor'),Gläubiger:getCss('--g-creditor')
 };
 function groupColor(g){return GROUP_COLORS[g]||getCss('--g-default');}
 document.getElementById('title').textContent=CONFIG.title;

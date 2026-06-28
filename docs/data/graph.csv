@@ -1,11 +1,6 @@
 source,relationship,group_source,target,group_target
-Max,organizes trip for,Organizer,Lukas,Groom
-Max,rooms with,Organizer,Felix,Guest
-Lukas,brother of,Groom,Tobias,Guest
-Lukas,rooms with,Groom,Jonas,Guest
-Tobias,drives,Guest,Daniel,Guest
-Daniel,owes,Guest,Max,Organizer
-Felix,owes,Guest,Max,Organizer
-Jonas,plans surprise with,Guest,Max,Organizer
-Tobias,plans surprise with,Guest,Felix,Guest
-Jonas,owes,Guest,Tobias,Guest
+D. Marcel,zahlt 78.90€,Schuldner,B. Kien,Gläubiger
+A. Richard,zahlt 14.90€,Schuldner,B. Kien,Gläubiger
+C. Viet,zahlt 16.72€,Schuldner,E. Tom,Gläubiger
+F. Jakob,zahlt 31.94€,Schuldner,E. Tom,Gläubiger
+G. Micha,zahlt 30.56€,Schuldner,E. Tom,Gläubiger
