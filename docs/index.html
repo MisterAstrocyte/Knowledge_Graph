@@ -195,10 +195,7 @@
    Leave "" to use the built-in sample data.
    ========================================================= */
 const CONFIG = {
-  // Primary: Google Sheet (fetched live on every page load)
-  sheetCsvUrl: "https://docs.google.com/spreadsheets/d/11CZBFL9jqI7fOmSSI1GF4gW1WFRRLN7iKnqspHbHS9g/export?format=csv&gid=0",
-  // Fallback: static copy in the repo (used when Sheet is unreachable)
-  fallbackCsvUrl: "data/graph.csv",
+  sheetCsvUrl: "data/graph.csv",   // kept in sync by GitHub Actions (sync_sheet.yml)
   title: "JGA Schuldenausgleich"
 };
 
@@ -486,27 +483,18 @@ function setStatus(state,label){
   document.getElementById('srcDot').className='dot '+state;
   document.getElementById('srcLabel').textContent=label;
 }
-async function tryLoad(url,label){
-  const res=await fetch(url);
-  if(!res.ok)throw new Error(res.status);
-  const text=await res.text();
-  // Balance-sheet format? (JGA spreadsheet with Restbetrag column)
-  const people=parseBalanceSheet(text);
-  if(people&&people.length){
-    const txns=settleDebts(people);
-    if(txns.length){render(build(txns));setStatus('live',label);return;}
-  }
-  // Regular graph-edge CSV format
-  const rows=parseCSV(text);
-  if(!rows.length)throw new Error('empty');
-  render(build(rows));setStatus('live',label);
-}
 async function load(){
-  // 1. Try the live Google Sheet
-  try{await tryLoad(CONFIG.sheetCsvUrl,'Google Sheet · live');return;}catch(e){console.warn('Sheet fetch failed:',e);}
-  // 2. Fall back to the static repo copy
-  try{await tryLoad(CONFIG.fallbackCsvUrl,'Fallback data');return;}catch(e){console.warn('Fallback fetch failed:',e);}
-  // 3. Use built-in sample
+  if(CONFIG.sheetCsvUrl){
+    try{
+      const res=await fetch(CONFIG.sheetCsvUrl);
+      if(!res.ok)throw new Error(res.status);
+      const rows=parseCSV(await res.text());
+      if(!rows.length)throw new Error('no rows');
+      render(build(rows));setStatus('live','Live data');return;
+    }catch(e){
+      render(build(parseCSV(SAMPLE_CSV)));setStatus('error','Data unreachable · sample');return;
+    }
+  }
   render(build(parseCSV(SAMPLE_CSV)));setStatus('sample','Sample data');
 }
 load();

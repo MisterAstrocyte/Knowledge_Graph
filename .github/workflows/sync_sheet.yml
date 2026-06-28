@@ -1,0 +1,30 @@
+name: Sync Google Sheet → graph.csv
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'   # every 30 minutes
+  workflow_dispatch:           # manual trigger from GitHub Actions UI
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Fetch sheet & compute minimum transactions
+        run: python backend/sync_graph.py
+
+      - name: Commit if graph changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/data/graph.csv
+          git diff --staged --quiet && echo "No changes" || \
+            git commit -m "chore: sync graph from Google Sheet" && git push
