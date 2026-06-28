@@ -195,10 +195,10 @@
    Leave "" to use the built-in sample data.
    ========================================================= */
 const CONFIG = {
-  // Either a relative file in this repo (default) OR a published Google Sheet CSV link.
-  //   repo file:   "data/graph.csv"
-  //   Google Sheet: "https://docs.google.com/spreadsheets/d/e/XXXX/pub?gid=0&single=true&output=csv"
-  sheetCsvUrl: "data/graph.csv",
+  // Primary: Google Sheet (fetched live on every page load)
+  sheetCsvUrl: "https://docs.google.com/spreadsheets/d/11CZBFL9jqI7fOmSSI1GF4gW1WFRRLN7iKnqspHbHS9g/export?format=csv&gid=0",
+  // Fallback: static copy in the repo (used when Sheet is unreachable)
+  fallbackCsvUrl: "data/graph.csv",
   title: "JGA Schuldenausgleich"
 };
 
@@ -252,6 +252,75 @@ function parseCSV(text){
     rel:(iR>-1?(r[iR]||'').trim():''),
     gs:(iGS>-1?(r[iGS]||'').trim():''),gt:(iGT>-1?(r[iGT]||'').trim():'')
   })).filter(r=>r.source&&r.target);
+}
+
+/* ---------- JGA balance-sheet parser + debt settler ---------- */
+function parseGermanFloat(s){
+  if(!s||!String(s).trim())return NaN;
+  return parseFloat(String(s).trim().replace(/\./g,'').replace(',','.'));
+}
+
+function parseBalanceSheet(text){
+  // Returns [{name, balance}] when CSV has a "Restbetrag" column; otherwise null.
+  const raw=[];let row=[],field='',q=false;
+  for(let i=0;i<text.length;i++){const c=text[i];
+    if(q){if(c==='"'&&text[i+1]==='"'){field+='"';i++;}else if(c==='"'){q=false;}else field+=c;}
+    else{if(c==='"')q=true;else if(c===','){row.push(field);field='';}
+      else if(c==='\n'){row.push(field);raw.push(row);row=[];field='';}
+      else if(c==='\r'){}else field+=c;}
+  }
+  if(field.length||row.length){row.push(field);raw.push(row);}
+  if(!raw.length)return null;
+  const head=raw.shift().map(h=>h.trim().toLowerCase());
+  const iRest=head.findIndex(h=>h.includes('restbetrag'));
+  if(iRest===-1)return null;
+  const people=[];
+  for(const r of raw){
+    const name=(r[0]||'').trim();if(!name)continue;
+    const balance=parseGermanFloat((r[iRest]||'').trim());
+    if(isNaN(balance))continue;
+    people.push({name,balance});
+  }
+  return people.length?people:null;
+}
+
+function settleDebts(people){
+  const EPS=0.005;
+  // Exclude zero balances (Julius / already settled)
+  const creditors=people.filter(p=>p.balance>EPS).map(p=>({...p})).sort((a,b)=>a.balance-b.balance);
+  const debtors  =people.filter(p=>p.balance<-EPS).map(p=>({...p,balance:-p.balance})).sort((a,b)=>a.balance-b.balance);
+  if(!creditors.length||!debtors.length)return[];
+  const txns=[];
+  const done=new Set();
+  // Phase 1 — each debtor appears in exactly one transaction (ascending → small debtors first).
+  // This guarantees every person with a non-zero balance shows up in the graph.
+  for(const cred of creditors){
+    for(const debt of debtors){
+      if(done.has(debt.name)||debt.balance<EPS||cred.balance<EPS)continue;
+      const amt=Math.round(Math.min(debt.balance,cred.balance)*100)/100;
+      if(amt<EPS)continue;
+      txns.push({source:debt.name,gs:'Schuldner',target:cred.name,gt:'Gläubiger',
+        rel:'zahlt '+amt.toFixed(2).replace('.',',')+'€'});
+      debt.balance=Math.round((debt.balance-amt)*100)/100;
+      cred.balance=Math.round((cred.balance-amt)*100)/100;
+      done.add(debt.name);
+    }
+  }
+  // Phase 2 — standard greedy for any remaining credit capacity
+  // (kicks in when data is fully balanced; handles debtors who need a second transaction).
+  const rc=creditors.filter(c=>c.balance>EPS).sort((a,b)=>b.balance-a.balance);
+  const rd=debtors  .filter(d=>d.balance>EPS).sort((a,b)=>b.balance-a.balance);
+  let ci=0,di=0;
+  while(ci<rc.length&&di<rd.length){
+    const amt=Math.round(Math.min(rc[ci].balance,rd[di].balance)*100)/100;
+    if(amt>EPS)txns.push({source:rd[di].name,gs:'Schuldner',target:rc[ci].name,gt:'Gläubiger',
+      rel:'zahlt '+amt.toFixed(2).replace('.',',')+'€'});
+    rc[ci].balance=Math.round((rc[ci].balance-amt)*100)/100;
+    rd[di].balance=Math.round((rd[di].balance-amt)*100)/100;
+    if(rc[ci].balance<EPS)ci++;
+    if(rd[di].balance<EPS)di++;
+  }
+  return txns;
 }
 
 /* ---------- build graph data ---------- */
@@ -417,18 +486,27 @@ function setStatus(state,label){
   document.getElementById('srcDot').className='dot '+state;
   document.getElementById('srcLabel').textContent=label;
 }
-async function load(){
-  if(CONFIG.sheetCsvUrl){
-    try{
-      const res=await fetch(CONFIG.sheetCsvUrl);
-      if(!res.ok)throw new Error(res.status);
-      const rows=parseCSV(await res.text());
-      if(!rows.length)throw new Error('no rows');
-      render(build(rows));setStatus('live','Live data');return;
-    }catch(e){
-      render(build(parseCSV(SAMPLE_CSV)));setStatus('error','Sheet unreachable · sample');return;
-    }
+async function tryLoad(url,label){
+  const res=await fetch(url);
+  if(!res.ok)throw new Error(res.status);
+  const text=await res.text();
+  // Balance-sheet format? (JGA spreadsheet with Restbetrag column)
+  const people=parseBalanceSheet(text);
+  if(people&&people.length){
+    const txns=settleDebts(people);
+    if(txns.length){render(build(txns));setStatus('live',label);return;}
   }
+  // Regular graph-edge CSV format
+  const rows=parseCSV(text);
+  if(!rows.length)throw new Error('empty');
+  render(build(rows));setStatus('live',label);
+}
+async function load(){
+  // 1. Try the live Google Sheet
+  try{await tryLoad(CONFIG.sheetCsvUrl,'Google Sheet · live');return;}catch(e){console.warn('Sheet fetch failed:',e);}
+  // 2. Fall back to the static repo copy
+  try{await tryLoad(CONFIG.fallbackCsvUrl,'Fallback data');return;}catch(e){console.warn('Fallback fetch failed:',e);}
+  // 3. Use built-in sample
   render(build(parseCSV(SAMPLE_CSV)));setStatus('sample','Sample data');
 }
 load();
